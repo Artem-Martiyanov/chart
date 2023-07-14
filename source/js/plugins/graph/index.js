@@ -2,7 +2,7 @@ import {createCanvas} from './utils.js';
 
 export class Graph {
   
-  constructor(settings, data) {
+  constructor(settings, data, chartName) {
     this.canvasWidth = settings.width
     this.canvasHeight = settings.height
     this.indentToActiveArea = settings.indentToActiveArea / 100
@@ -25,7 +25,7 @@ export class Graph {
     this.canvas = createCanvas(this.canvasWidth, this.canvasHeight)
     this.ctx = this.canvas.getContext('2d')
     
-    this.wrapper = document.querySelector(`[data-chart="${settings.chartName}"]`)
+    this.wrapper = document.querySelector(`[data-chart="${chartName}"]`)
     this.wrapper.insertAdjacentElement('beforeend', this.canvas)
     
     this.userDrowningChart = this.mappingData[this.mappingData.length - 1].dataSet.map(point => ({
@@ -68,25 +68,17 @@ export class Graph {
    @return {string}
    */
   #calculateDifference = () => {
+    let result = 0
     let originalDataSet = []
     
     this.mappingData.forEach((group, index, array) => {
-      if (group.name === 'hidden') {
+      if (index === array.length - 1) {
         originalDataSet.push(array[index - 1].dataSet[array[index - 1].dataSet.length - 1])
         originalDataSet = [...originalDataSet, ...group.dataSet]
       }
     })
-    const calcShadowArea = (points) => points.reduce((acc, point, i, arr) => {
-      if (i < arr.length - 1) {
-        acc += (point.y + arr[i + 1].y) / 2 * this.intervalWidth
-      }
-      return acc
-    }, 0)
-    
-    const originalChartArea = calcShadowArea(originalDataSet)
-    const userChartArea = calcShadowArea(this.userDrowningChart)
-    const absDifference = Math.abs(originalChartArea - userChartArea)
-    return (absDifference / originalChartArea * 100).toFixed(2)
+    originalDataSet.forEach((point, index, array) => result += Math.abs(point.y - this.userDrowningChart[index].y))
+    return (result / 10).toFixed(2)
   }
   
   /**
@@ -119,9 +111,46 @@ export class Graph {
   }
   
   /**
+   @description Рисует название скрытой группы
+   */
+  #drawHiddenChartName = () => {
+    const hiddenChart = this.mappingData[this.mappingData.length - 1]
+    const minX = hiddenChart.dataSet[0].x
+    const maxX = hiddenChart.dataSet.slice(-1)[0].x
+    const position = {
+      x: minX + ((maxX - minX) / 2) - this.intervalWidth / 2,
+      y: this.startY + (this.indentToActiveArea * this.fieldHeight / 2)
+    }
+    let alpha = 0
+    const getSettings = (alpha) => ({
+      textPosition: position,
+      textContent: hiddenChart.name,
+      textColor: `rgba(0, 0, 0, ${alpha / 100})`,
+      fontSize: this.settings.groupNamesSize,
+      fontWeight: 'bold',
+      align: 'center',
+      maxWidth: maxX - minX - this.intervalWidth
+    })
+    const smoothAppearance = () => {
+      alpha++
+      this.#drawText(getSettings(alpha))
+      if (alpha >= 20) {
+        clearInterval(smooth)
+      }
+    }
+    const smooth = setInterval(smoothAppearance, 25)
+  }
+  
+  /**
    @description Рисует скрытую часть графика
    */
   drawHiddenChart = (then) => {
+    /**
+     @description Вычисляет угол наклона вектора (из первой точки ко второй) к оси X
+     @param {{x: number, y: number}} point1 - координаты первой точки
+     @param {{x: number, y: number}} point2 - координаты второй точки
+     @return {number} - угол в радианах
+     */
     const calcAngle = (point1, point2) => {
       const scalarProduct = (this.intervalWidth ** 2)
       const moduleFirstPoint = Math.sqrt(scalarProduct)
@@ -129,11 +158,25 @@ export class Graph {
       const cosAngle = scalarProduct / (moduleFirstPoint * moduleSecondPoint)
       return point2.y <= point1.y ? Math.acos(cosAngle) : Math.acos(cosAngle) * -1
     }
+    
+    /**
+     @description Вычисляет длину отрезка от первой точки до второй
+     @param {{x: number, y: number}} point1 - координаты первой точки
+     @param {{x: number, y: number}} point2 - координаты второй точки
+     @return {number} - длина отрезка
+     */
     const calcLineLength = (point1, point2) => {
       const yLeg = Math.abs(point2.y - point1.y)
       return Math.sqrt((yLeg ** 2) + (this.intervalWidth ** 2))
     }
     
+    /**
+     @description Рассчитывает координаты точки, в которую попадёт вектор указанной длины при заданном угле наклона
+     @param {{x: number, y: number}} point - координаты исходной
+     @param {number} angle - угол наклона, в радианах
+     @param {number} length - длина вектора перемещения
+     @return {{x, y}} - координаты точки смещения
+     */
     const getCoordinates = (point, angle, length) => {
       const newX = (Math.cos(angle) * length) + point.x
       const newY = ((Math.sin(angle) * length) - point.y) * -1
@@ -146,7 +189,7 @@ export class Graph {
     
     // Получаем массив из скрытых точек + последнюю точку предыдущей группы
     this.mappingData.forEach((group, index, array) => {
-      if (group.name === 'hidden') {
+      if (index === array.length - 1) {
         hiddenPoints.push(array[index - 1].dataSet[array[index - 1].dataSet.length - 1])
         hiddenPoints = [...hiddenPoints, ...group.dataSet]
       }
@@ -176,17 +219,20 @@ export class Graph {
         if (pointIndex >= hiddenPoints.length - 1) {
           
           const endCircle = [
-            this.mappingData.splice(-1)[0].dataSet.splice(-1)[0],
+            this.mappingData.slice(-1)[0].dataSet.slice(-1)[0],
             this.settings.hiddenChartLineColor,
             12,
             {
-              textContent: this.data.splice(-1)[0].dataSet.splice(-1)[0].y,
+              textContent: this.data.slice(-1)[0].dataSet.slice(-1)[0].y,
               textColor: '#000000',
               fontSize: '30',
               fontStyle: 'sans-serif'
             }
           ]
           this.#drawCircle(...endCircle)
+          
+          this.#drawHiddenChartName()
+          
           then(this.chartDifference)
           return
         }
@@ -268,7 +314,7 @@ export class Graph {
    */
   #pointerDownHandler = (event) => {
     const {x: pointerX, y: pointerY} = this.#calculatePointerPosition(event)
-    const hiddenGroup = this.mappingData.find(group => group.name === 'hidden')
+    const hiddenGroup = this.mappingData[this.mappingData.length - 1]
     
     const maxX = Math.max(...hiddenGroup.dataSet.map(point => point.x))
     const minX = Math.min(...hiddenGroup.dataSet.map(point => point.x)) - this.intervalWidth
@@ -318,7 +364,7 @@ export class Graph {
    @param {object} settings - настройки
    */
   #drawChart = (data, settings) => {
-    const dataWithoutHiddenPart = data.filter(group => group.name !== 'hidden')
+    const dataWithoutHiddenPart = data.slice(0, -1)
     // Рисуем задний фон
     this.#drawBg(settings.chartBackgroundLineWidth, settings.chartBackgroundLineColor, settings.chartBackgroundColor)
     
@@ -326,10 +372,10 @@ export class Graph {
     this.#drawChartLine(dataWithoutHiddenPart, settings.chartLineColor, settings.chartLineWidth, settings.shadowColors)
     
     // Рисуем подписи снизу
-    this.#drawXSign(34)
+    this.#drawXSign(this.settings.signXTextSize)
     
     // Рисуем названия групп
-    this.#drawGroupNames(34)
+    this.#drawGroupNames(this.settings.groupNamesSize)
   }
   
   /**
@@ -365,7 +411,7 @@ export class Graph {
   }
   
   #drawCircles = () => {
-    const dataWithoutHiddenPart = this.mappingData.filter(group => group.name !== 'hidden')
+    const dataWithoutHiddenPart = this.mappingData.slice(0, -1)
     // круг в начале графика
     const firstPointOfFirstGroup = {x: dataWithoutHiddenPart[0].dataSet[0].x, y: dataWithoutHiddenPart[0].dataSet[0].y}
     const beginCircle = [
@@ -468,8 +514,8 @@ export class Graph {
    @param {number} fontSize - размер шрифта
    */
   #drawGroupNames = (fontSize) => {
-    this.mappingData.forEach((group, index) => {
-      if (group.name !== 'hidden') {
+    this.mappingData.forEach((group, index, array) => {
+      if (index !== array.length - 1) {
         const allGroupX = group.dataSet.map(point => point.x)
         const minGroupX = Math.min(...allGroupX)
         const maxGroupX = Math.max(...allGroupX)
@@ -635,5 +681,3 @@ export class Graph {
     }
   }
 }
-
-

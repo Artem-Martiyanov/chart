@@ -1,14 +1,13 @@
 import {Graph} from './plugins/graph/index.js'
 
 const settings = {
-  chartName: 'my-chart',
   width: 1000,
   height: 600,
   fieldOffset: 50,    // Смещение графика для эффекта выхода за границы, px
   indentToActiveArea: 15, // смещение от минимальной и максимальной точки графика до низа и верха, %
-  chartLineColor: '#0bc',
-  userChartLineColor: '#f92',
-  hiddenChartLineColor: '#f44',
+  chartLineColor: '#00bbcc',
+  userChartLineColor: '#ff9922',
+  hiddenChartLineColor: '#ff4444',
   chartLineWidth: 7,
   chartBackgroundColor: 'rgba(0, 0, 0, 0.1)',
   chartBackgroundLineColor: '#ffffff',
@@ -17,6 +16,8 @@ const settings = {
   xSignInterval: 4,
   xDataMask: '\'x',
   drawingSpeed: 3,
+  signXTextSize: 34,
+  groupNamesSize: 34,
 }
 
 const dataSet = [
@@ -44,7 +45,7 @@ const dataSet = [
     ]
   },
   {
-    name: 'hidden',
+    name: 'Путин',
     dataSet: [
       {x: 13, y: 280},
       {x: 14, y: 300},
@@ -54,13 +55,48 @@ const dataSet = [
     ]
   }
 ]
+const dataSet2 = [
+  {
+    name: 'Путин',
+    dataSet: [
+      {x: 0, y: 0.1},
+      {x: 1, y: 0.9},
+      {x: 2, y: 1.5},
+      {x: 3, y: 1},
+      {x: 4, y: 0.9},
+    ]
+  },
+  {
+    name: 'Медведев',
+    dataSet: [
+      {x: 5, y: 2},
+      {x: 6, y: 2.1},
+      {x: 7, y: 2},
+      {x: 8, y: 1},
+    ]
+  },
+  {
+    name: 'Путин',
+    dataSet: [
+      {x: 9, y: 1.2},
+      {x: 10, y: 1.5},
+      {x: 11, y: 1.8},
+      {x: 12, y: 2},
+      {x: 13, y: 1.8},
+    ]
+  }
+]
 
-
-const myChart = new Graph(settings, dataSet)
+const myChart = new Graph(settings, dataSet, 'my-chart')
+const myChart2 = new Graph(settings, dataSet2, 'my-chart-2')
 
 let flag = false
+let flag2 = false
 myChart.onDrawn(() => {
   flag = true
+})
+myChart2.onDrawn(() => {
+  flag2 = true
 })
 
 
@@ -72,6 +108,14 @@ document.addEventListener('pointerdown', (event) => {
         resultDiv.textContent = 'Разница: ' + result + '%'
       })
     }
-    
+  }
+  
+  if (event.target.dataset.chart === 'my-chart-button-2') {
+    if (flag2) {
+      myChart2.drawHiddenChart((result) => {
+        const resultDiv = document.querySelector('.result-2')
+        resultDiv.textContent = 'Разница: ' + result + '%'
+      })
+    }
   }
 })
